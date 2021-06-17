@@ -1,64 +1,36 @@
 cmake_minimum_required(VERSION 3.16)
-project(libjs-test262 CXX)
+project(libjs-test262-superbuild LANGUAGES NONE)
 
-if (NOT DEFINED ENV{SERENITY_SOURCE_DIR})
+include(ExternalProject)
+
+if (NOT SERENITY_SOURCE_DIR)
     message(FATAL_ERROR "SERENITY_SOURCE_DIR not set.")
 endif()
 
-get_filename_component(SERENITY_SOURCE_DIR $ENV{SERENITY_SOURCE_DIR} ABSOLUTE)
+set(LAGOM_SOURCE_DIR ${SERENITY_SOURCE_DIR}/Meta/Lagom)
+set(LAGOM_BINARY_DIR ${SERENITY_SOURCE_DIR}/Build/lagom)
+set(LAGOM_INSTALL_DIR ${CMAKE_CURRENT_BINARY_DIR}/lagom)
 
-set(CMAKE_CXX_STANDARD 20)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_CXX_EXTENSIONS OFF)
+set_property(DIRECTORY PROPERTY EP_PREFIX "${PROJECT_BINARY_DIR}/ep-prefix")
 
-# Copied from Serenity's root CMakeLists.txt
-add_compile_options(-Wall)
-add_compile_options(-Wextra)
-add_compile_options(-Wno-address-of-packed-member)
-add_compile_options(-Wcast-align)
-add_compile_options(-Wcast-qual)
-add_compile_options(-Wno-deprecated-copy)
-add_compile_options(-Wduplicated-cond)
-add_compile_options(-Wdouble-promotion)
-add_compile_options(-Wno-expansion-to-defined)
-add_compile_options(-Wformat=2)
-add_compile_options(-Wimplicit-fallthrough)
-add_compile_options(-Wno-literal-suffix)
-add_compile_options(-Wlogical-op)
-add_compile_options(-Wmisleading-indentation)
-add_compile_options(-Wmissing-declarations)
-add_compile_options(-Wno-nonnull-compare)
-add_compile_options(-Wnon-virtual-dtor)
-add_compile_options(-Wno-unknown-warning-option)
-add_compile_options(-Wundef)
-add_compile_options(-Wunused)
-add_compile_options(-Wwrite-strings)
-add_compile_options(-fno-exceptions)
-
-set(SERENITY_LIBRARIES_DIR ${SERENITY_SOURCE_DIR}/Userland/Libraries)
-
-# FIXME: I have not idea how to CMake :^)
-if(EXISTS ${SERENITY_SOURCE_DIR}/Build/lagom/libLagom.a)
-    # Lagom-only build with cmake ../../Meta/Lagom
-    set(LIBLAGOM_PATH ${SERENITY_SOURCE_DIR}/Build/lagom/libLagom.a)
-elseif(EXISTS ${SERENITY_SOURCE_DIR}/Build/lagom/Meta/Lagom/libLagom.a)
-    # Full build with cmake ../..
-    set(LIBLAGOM_PATH ${SERENITY_SOURCE_DIR}/Build/lagom/Meta/Lagom/libLagom.a)
-else()
-    message(FATAL_ERROR "libLagom.a not found!")
-endif()
-
-set(SOURCES
-    src/$262Object.cpp
-    src/AgentObject.cpp
-    src/GlobalObject.cpp
-    src/IsHTMLDDA.cpp
-    src/main.cpp
+ExternalProject_Add(Lagom
+    PREFIX lagom
+    SOURCE_DIR ${LAGOM_SOURCE_DIR}
+    BINARY_DIR ${LAGOM_BINARY_DIR}
+    INSTALL_DIR ${LAGOM_INSTALL_DIR}
+    CMAKE_ARGS "-DBUILD_LAGOM=ON"
+    CMAKE_ARGS "-DCMAKE_INSTALL_PREFIX=<INSTALL_DIR>"
+    BUILD_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR> --config $<CONFIG>
+    BUILD_ALWAYS ON
+    STEP_TARGETS install
+    EXCLUDE_FROM_ALL YES
 )
 
-add_executable(libjs-test262-runner ${SOURCES})
-target_include_directories(libjs-test262-runner
-    PUBLIC ${SERENITY_SOURCE_DIR}
-    PUBLIC ${SERENITY_LIBRARIES_DIR}
+ExternalProject_Add(libjs-test262
+    PREFIX libjs-262-build
+    SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/src
+    CMAKE_ARGS "-DCMAKE_PREFIX_PATH=${LAGOM_INSTALL_DIR}/share"
+    CMAKE_ARGS "-DCMAKE_INSTALL_PREFIX=${CMAKE_CURRENT_BINARY_DIR}"
+    DEPENDS Lagom-install
+    STEP_TARGETS install
 )
-target_link_libraries(libjs-test262-runner pthread ${LIBLAGOM_PATH})
